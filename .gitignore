@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+test/venv/
+
+# Environment Variables (contains sensitive data)
+.env
+
+# Data Files (large files)
+*.csv
+*.pkl
+*.parquet
+test/data/*.csv
+test/data/*.txt
+model/*.pkl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Cache
+.cache/
+*.cache
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Results (optional - uncomment if you don't want to track results)
+# results/
+# test/data/
+
+# Temporary files
+*.tmp
+*.temp

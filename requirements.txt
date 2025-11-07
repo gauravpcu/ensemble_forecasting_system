@@ -1,0 +1,16 @@
+# Core dependencies for ensemble forecasting system
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Model dependencies
+lightgbm>=4.0.0
+boto3>=1.34.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Optional (for Jupyter notebooks)
+jupyter>=1.0.0
+ipykernel>=6.25.0

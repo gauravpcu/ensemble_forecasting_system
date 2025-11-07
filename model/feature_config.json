@@ -1,0 +1,69 @@
+{
+  "target_column": "target_value",
+  "timestamp_column": "CreateDate",
+  "item_id_column": "ProductID",
+  "features": [
+    "rolling_mean_7d",
+    "rolling_std_7d",
+    "rolling_mean_30d",
+    "rolling_std_30d",
+    "rolling_mean_90d",
+    "rolling_mean_365d",
+    "lag_7",
+    "lag_14",
+    "lag_30",
+    "lag_365",
+    "seasonal_trend",
+    "seasonal_seasonal",
+    "day_of_week",
+    "day_of_month",
+    "month",
+    "quarter",
+    "year",
+    "is_month_end",
+    "is_quarter_end",
+    "price_volatility",
+    "order_frequency",
+    "vendor_reliability",
+    "CustomerID_encoded",
+    "FacilityID_encoded",
+    "ProductID_encoded"
+  ],
+  "max_date": "2025-10-28",
+  "cutoff_date": "2025-10-14",
+  "model_info": {
+    "best_iteration": 586,
+    "num_features": 25,
+    "data_source": "order_history_2025-10-28.csv",
+    "training_period": "2023-10-29 to 2025-10-14",
+    "data_years": 2.0
+  },
+  "engineered_features": [
+    "rolling_mean_7d",
+    "rolling_std_7d",
+    "rolling_mean_30d",
+    "rolling_std_30d",
+    "rolling_mean_90d",
+    "rolling_mean_365d",
+    "lag_7",
+    "lag_14",
+    "lag_30",
+    "lag_365",
+    "seasonal_trend",
+    "seasonal_seasonal"
+  ],
+  "calendar_features": [
+    "day_of_week",
+    "day_of_month",
+    "month",
+    "quarter",
+    "year",
+    "is_month_end",
+    "is_quarter_end"
+  ],
+  "business_features": [
+    "price_volatility",
+    "order_frequency",
+    "vendor_reliability"
+  ]
+}
