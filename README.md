@@ -1,224 +1,159 @@
 # Ensemble Forecasting System
 
-Healthcare supply chain inventory forecasting using ensemble machine learning (LightGBM + DeepAR).
+Healthcare supply chain inventory prediction using LightGBM (95%) + DeepAR (5%) ensemble.
 
-## 🎯 Overview
+## Quick Start
 
-Predicts inventory reorder needs for healthcare supply chain management by combining:
-- **LightGBM (95%)**: Structured feature-based predictions  
-- **DeepAR (5%)**: Time series pattern recognition
-
-### Key Features
-- ✅ Extended 90-day context for seasonal pattern detection
-- ✅ Customer-specific calibration (14 customers optimized)
-- ✅ Volume-based safety multipliers
-- ✅ Product-level precision tracking (78K+ items)
-- ✅ Comprehensive performance metrics
-
-### Current Performance (ScionHealth)
-- **Precision:** 82.2% - When we predict order, we're right 82% of time
-- **Recall:** 92.4% - We catch 92.4% of all actual orders  
-- **F1 Score:** 87.0% - Excellent balance
-- **MAE:** 24.92 units average error per item
-
----
-
-## 📚 Documentation
-
-| Document | Use When You Need |
-|----------|-------------------|
-| **[README.md](README.md)** | Quick start, installation, basic usage |
-| **[USER_GUIDE.md](USER_GUIDE.md)** | Detailed parameters, metrics, workflows, troubleshooting |
-| **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** | Fast command lookup, metric tables |
-| **[FILE_REFERENCE.md](FILE_REFERENCE.md)** | Understanding what each file does |
-
----
-
-## �  Quick Start
-
-### 1. Installation
+### Installation
 ```bash
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env with your settings
+# Edit .env with your paths
 ```
 
-### 2. Essential Configuration
-Edit `.env`:
+### Generate Predictions
+```bash
+# One customer
+python scripts/predict.py scionhealth
+
+# Specific date
+python scripts/predict.py 2025-11-15 scionhealth
+
+# Multiple customers
+python scripts/predict.py 2025-11-15 scionhealth,mercy
+
+# With facility filter
+python scripts/predict.py scionhealth 287 2025-11-15
+
+# Save to file
+python scripts/predict.py scionhealth output.csv
+
+# See all options
+python scripts/predict.py --help
+```
+
+### Train Model
+```bash
+python scripts/train.py
+```
+
+### Run Tests
+```bash
+python tests/run_test.py --quick          # Quick test
+python tests/run_test.py --full           # Full test suite
+python tests/run_test.py --customer scionhealth  # Customer-specific
+```
+
+### Configuration Management
+```bash
+# Environment config
+python scripts/config.py --show
+python scripts/config.py --set BATCH_SIZE 2000
+
+# Customer calibrations
+python scripts/config.py --calibrations
+python scripts/config.py --customer scionhealth
+python scripts/config.py --update mercy 0.85
+```
+
+## Project Structure
+
+```
+├── src/                    # Source code
+│   ├── core/              # Prediction logic
+│   ├── models/            # Model loading & ensemble
+│   ├── data/              # Data processing
+│   ├── config/            # Configuration
+│   ├── calibration/       # Customer calibrations
+│   └── utils/             # Utilities
+├── scripts/               # Executable scripts
+│   ├── predict.py         # Generate predictions
+│   ├── train.py           # Train models
+│   └── manage_calibrations.py
+├── tests/                 # Test suite
+├── config/                # Config files
+├── model/                 # Trained models
+└── docs/                  # Documentation
+```
+
+## Configuration
+
+All settings in `.env` file:
 ```bash
 SOURCE_DATA_FILE=/path/to/order_history.csv
-DEEPAR_ENDPOINT_NAME=your-endpoint
-DEEPAR_REGION=us-east-1
-CLASSIFICATION_THRESHOLD=4
+TEST_DATA_DIR=./tests/data
+LIGHTGBM_MODEL_PATH=./model/lightgbm_model.pkl
+DEEPAR_ENDPOINT_NAME=hybrent-nov
+LIGHTGBM_WEIGHT=0.95
+DEEPAR_WEIGHT=0.05
 ```
 
-### 3. Run Test
+## Key Features
+
+- **Ensemble Model**: LightGBM (95%) + DeepAR (5%)
+- **Customer Calibration**: Adjust predictions per customer
+- **Prediction Date Tracking**: Every prediction includes date metadata
+- **Flexible Predictions**: Single/multiple customers, facility filtering
+- **90-Day Context**: Uses 90 days of history for predictions
+- **Classification**: Automatic reorder recommendations (≥4 units)
+
+## Prediction Output
+
+Every prediction includes:
+```csv
+prediction_date,prediction_generated_at,CustomerID,FacilityID,ProductID,ProductName,predicted_value,predicted_reorder,reorder_recommendation
+2025-11-15,2025-11-11 14:30:00,scionhealth,287,12345,Surgical Gloves,25.5,1,ORDER
+```
+
+## Model Performance
+
+- **MAE**: 4-6 units (with 90-day context)
+- **Precision**: >90% (low false alarm rate)
+- **Best for**: Medium-volume items (5-20 units)
+- **Challenge**: Very low volume (0-5 units) and sporadic orders
+
+## Customer Calibrations
+
+Adjust predictions per customer:
+- **ScionHealth**: 1.05x (reduce stockouts)
+- **Mercy**: 0.85x (reduce over-ordering)
+- **IBJI**: 1.575x (high demand)
+
+## Common Tasks
+
+### Daily Predictions
 ```bash
-python3 test/run_full_test.py
+python scripts/predict.py predictions_$(date +%Y%m%d).csv
 ```
 
-### 4. View Results
+### Weekly Planning
 ```bash
-cat test/data/ANALYSIS_SUMMARY.txt
+for i in {0..6}; do
+  date=$(date -v+${i}d +%Y-%m-%d)
+  python scripts/predict.py $date predictions_$date.csv
+done
 ```
 
----
-
-## 🎯 Common Tasks
-
+### Customer Analysis
 ```bash
-# Optimize threshold
-python3 test/test_thresholds.py
-
-# Apply calibration
-python3 test/apply_calibration.py
-
-# Analyze customer
-python3 test/customer_precision.py scionhealth
-
-# Extract predictions
-python3 test/extract_all_facilities.py
-
-# Change config
-python3 configure.py --set CLASSIFICATION_THRESHOLD 5
+python scripts/predict.py scionhealth analysis.csv
+python tests/run_test.py --customer scionhealth
 ```
 
----
+## Documentation
 
-## 🤖 Model Training
+- **README.md** (this file) - Quick start and overview
+- **docs/USAGE_GUIDE.md** - Comprehensive usage guide
+- **docs/TRAINING_GUIDE.md** - Model training guide
+- **docs/README.md** - System architecture and design
 
-### Train New LightGBM Model
+## Support
 
-```bash
-# Set training data
-python3 configure.py --set SOURCE_DATA_FILE "/path/to/order_history.csv"
+- Configuration issues: Check `.env` file
+- Import errors: Ensure `src/` is in Python path
+- Model errors: Verify model files in `model/` directory
+- Data errors: Check `SOURCE_DATA_FILE` path in `.env`
 
-# Train model
-python3 train_model.py
-```
+## License
 
-### Training Data Split
-
-The training process uses a **3-way temporal split**:
-
-```
-All Historical Data (e.g., 730 days)
-│
-├─────────────────────────────────────────────────────────┤
-│  [────────── Training (716 days) ──────]  [Test (14d)] │
-│  [─ Train (90%) ─]  [─ Val (10%) ─]                    │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Example with 2 years of data:**
-- **Train Set (90%):** Nov 2023 - Aug 2025 (~645 days) - Fit model
-- **Validation Set (10%):** Aug 2025 - Oct 2025 (~71 days) - Early stopping
-- **Test Set:** Last 14 days - Final evaluation (held out)
-
-**Configuration:**
-```bash
-# Adjust test period
-python3 configure.py --set TRAINING_TEST_DAYS 30
-
-# Adjust validation split
-python3 configure.py --set TRAINING_VALIDATION_SPLIT 0.2  # 20%
-
-# Tune hyperparameters
-python3 configure.py --set LGBM_LEARNING_RATE 0.01
-python3 configure.py --set LGBM_NUM_BOOST_ROUND 5000
-```
-
-**See [TRAINING_GUIDE.md](TRAINING_GUIDE.md) for complete training documentation.**
-
----
-
-## 📊 Key Metrics
-
-| Metric | What It Means | Good Value | Current |
-|--------|---------------|------------|---------|
-| **Precision** | % correct when we predict order | >80% | 82.2% ✅ |
-| **Recall** | % of actual orders we catch | >90% | 92.4% ✅ |
-| **F1 Score** | Balance of precision & recall | >80% | 87.0% ✅ |
-| **MAE** | Average error in units | <10 | 24.92 ⚠️ |
-
----
-
-## 📁 Project Structure
-
-```
-ensemble_forecasting_system/
-├── 📄 Documentation
-│   ├── README.md              # Quick start (this file)
-│   ├── USER_GUIDE.md          # Comprehensive guide
-│   ├── QUICK_REFERENCE.md     # Fast lookup
-│   └── FILE_REFERENCE.md      # File reference
-│
-├── ⚙️ Configuration
-│   ├── .env                   # Active config
-│   ├── configure.py           # Config management
-│   └── config_defaults.py     # Defaults
-│
-├── 🔧 Core System
-│   ├── ensemble_predictor.py # Main predictor
-│   ├── data_loader.py         # Data processing
-│   └── model_loader.py        # Model loading
-│
-├── 🗂️ Models
-│   └── model/                 # LightGBM + config
-│
-└── 🧪 Testing
-    ├── run_full_test.py       # Main pipeline
-    ├── test_thresholds.py     # Optimize threshold
-    ├── apply_calibration.py   # Apply calibration
-    └── data/                  # Results
-```
-
----
-
-## 🔄 Typical Workflow
-
-### Initial Setup
-```bash
-1. Configure .env
-2. python3 test/run_full_test.py
-3. Review results
-```
-
-### Optimization
-```bash
-1. python3 test/test_thresholds.py
-2. python3 test/optimize_calibration.py
-3. python3 configure.py --set PARAMETER value
-4. python3 test/apply_calibration.py
-```
-
-### Daily Operations
-```bash
-python3 test/extract_customer_predictions.py YYYY-MM-DD
-```
-
----
-
-## 🆘 Quick Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| High volume error (>150%) | Reduce safety multipliers |
-| Low recall (<80%) | Decrease threshold |
-| Low precision (<50%) | Increase threshold |
-
-**See [USER_GUIDE.md](USER_GUIDE.md#troubleshooting) for detailed troubleshooting.**
-
----
-
-## 📞 Getting Help
-
-1. **Quick commands**: [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
-2. **Detailed guide**: [USER_GUIDE.md](USER_GUIDE.md)
-3. **File questions**: [FILE_REFERENCE.md](FILE_REFERENCE.md)
-
----
-
-**Version:** 2.0  
-**Last Updated:** November 2025  
-**Optimizations:** Threshold (7→4), Customer Calibration (14), Volume Safety Multipliers
+Proprietary - Internal use only

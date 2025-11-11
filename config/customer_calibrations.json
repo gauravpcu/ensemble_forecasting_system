@@ -1,0 +1,156 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-11-11",
+  "default_calibration": 1.0,
+  "classification_threshold": 4,
+  "customers": {
+    "scionhealth": {
+      "calibration_multiplier": 0.206,
+      "status": "verified",
+      "precision": 0.925,
+      "recall": 0.509,
+      "mae": 27.34,
+      "last_tested": "2025-11-11",
+      "notes": "Excellent precision (92.5%). Conservative but reliable. Production ready.",
+      "recommendation": "Deploy with 50-60% safety stock"
+    },
+    "mercy": {
+      "calibration_multiplier": 0.18,
+      "status": "testing",
+      "precision": 0.459,
+      "recall": 0.285,
+      "mae": 3.61,
+      "last_tested": "2025-11-11",
+      "notes": "Optimal calibration after testing 0.362, 0.18, and 0.15. Best balance of precision/recall. 70% improvement from original.",
+      "recommendation": "Use 0.18. Pilot with 50-60% safety stock. Not ready for full production (need 60%+ precision).",
+      "suggested_calibration": 0.18
+    },
+    "ibji": {
+      "calibration_multiplier": 1.575,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "High calibration. Needs verification.",
+      "recommendation": "Test and verify before production"
+    },
+    "gcvs": {
+      "calibration_multiplier": 0.216,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Similar to ScionHealth calibration",
+      "recommendation": "Test and verify"
+    },
+    "cure4thekids": {
+      "calibration_multiplier": 0.533,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Moderate calibration",
+      "recommendation": "Test and verify"
+    },
+    "chickasaw": {
+      "calibration_multiplier": 0.186,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Low calibration - conservative",
+      "recommendation": "Test and verify"
+    },
+    "centerforvein": {
+      "calibration_multiplier": 0.485,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Moderate calibration",
+      "recommendation": "Test and verify"
+    },
+    "orthonebraska": {
+      "calibration_multiplier": 0.224,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Similar to ScionHealth calibration",
+      "recommendation": "Test and verify"
+    },
+    "restore": {
+      "calibration_multiplier": 0.33,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Moderate calibration",
+      "recommendation": "Test and verify"
+    },
+    "zoomcare": {
+      "calibration_multiplier": 0.337,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Moderate calibration",
+      "recommendation": "Test and verify"
+    },
+    "ccoc": {
+      "calibration_multiplier": 0.251,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Moderate calibration",
+      "recommendation": "Test and verify"
+    },
+    "onepeak": {
+      "calibration_multiplier": 0.544,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Higher calibration",
+      "recommendation": "Test and verify"
+    },
+    "healthsystemsinc": {
+      "calibration_multiplier": 0.265,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Moderate calibration",
+      "recommendation": "Test and verify"
+    },
+    "amberwellhealth": {
+      "calibration_multiplier": 0.216,
+      "status": "active",
+      "precision": null,
+      "recall": null,
+      "mae": null,
+      "last_tested": null,
+      "notes": "Similar to ScionHealth calibration",
+      "recommendation": "Test and verify"
+    }
+  },
+  "status_definitions": {
+    "verified": "Tested and verified. Production ready.",
+    "active": "In use but not recently verified.",
+    "needs_recalibration": "Poor performance. Needs adjustment before deployment.",
+    "testing": "Currently being tested.",
+    "deprecated": "No longer in use."
+  }
+}
