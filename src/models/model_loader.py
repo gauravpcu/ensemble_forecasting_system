@@ -86,11 +86,28 @@ class DeepARModel:
         """Connect to SageMaker endpoint"""
         try:
             print(f"Connecting to DeepAR endpoint: {self.endpoint_name}...")
-            self.runtime_client = boto3.client(
-                'sagemaker-runtime',
-                region_name=self.region
-            )
-            print("✓ DeepAR endpoint connected")
+            
+            # Try to use SSO profile if available
+            import os
+            profile_name = os.environ.get('AWS_PROFILE', 'AWSAdministratorAccess-236357498302')
+            
+            try:
+                # Try with SSO profile
+                session = boto3.Session(profile_name=profile_name)
+                self.runtime_client = session.client(
+                    'sagemaker-runtime',
+                    region_name=self.region
+                )
+                print(f"✓ DeepAR endpoint connected (using profile: {profile_name})")
+            except Exception as profile_error:
+                # Fall back to default credentials
+                print(f"⚠️  SSO profile not available, using default credentials")
+                self.runtime_client = boto3.client(
+                    'sagemaker-runtime',
+                    region_name=self.region
+                )
+                print("✓ DeepAR endpoint connected")
+                
         except Exception as e:
             print(f"✗ DeepAR connection failed: {str(e)}")
             self.runtime_client = None
@@ -133,27 +150,138 @@ class DeepARModel:
         except Exception as e:
             raise Exception(f"DeepAR prediction error: {str(e)}")
     
-    def predict_simple(self, X, y_actual: Optional[np.ndarray] = None) -> np.ndarray:
+    def predict_simple(self, X, context_data: Optional[Dict] = None) -> np.ndarray:
         """
         Simplified prediction interface (for compatibility with ensemble)
         
         Args:
-            X: Feature matrix (not used directly, but kept for interface compatibility)
-            y_actual: Actual values (used to generate mock predictions if endpoint fails)
+            X: Feature matrix with item_id and timestamp columns
+            context_data: Dictionary with historical data for each item_id
+                         Format: {item_id: {'start': timestamp, 'target': [values]}}
             
         Returns:
             Array of predictions
         """
-        # For now, return mock predictions based on actual values
-        # In production, you would convert X to DeepAR format and call predict()
-        if y_actual is not None:
-            # Generate predictions with some noise
-            noise = np.random.normal(0, y_actual.std() * 0.1, len(y_actual))
-            predictions = y_actual + noise
-            return np.maximum(predictions, 0)  # Ensure non-negative
-        else:
-            # Return zeros if no actual values available
+        if self.runtime_client is None:
+            print("⚠️  DeepAR endpoint not available, returning zeros")
             return np.zeros(len(X))
+        
+        try:
+            # Prepare DeepAR format data
+            deepar_data = self._prepare_deepar_format(X, context_data)
+            
+            if not deepar_data or not deepar_data.get('instances'):
+                print("⚠️  No valid data for DeepAR, returning zeros")
+                return np.zeros(len(X))
+            
+            # Batch predictions to avoid request size limits
+            # SageMaker has a 5MB request limit, so batch to ~100 items at a time
+            batch_size = 100
+            instances = deepar_data['instances']
+            all_predictions = []
+            
+            print(f"   Making {len(instances)} predictions in batches of {batch_size}...")
+            
+            for i in range(0, len(instances), batch_size):
+                batch_instances = instances[i:i+batch_size]
+                batch_request = {
+                    "instances": batch_instances,
+                    "configuration": deepar_data['configuration']
+                }
+                
+                # Make predictions for this batch
+                batch_predictions = self.predict(batch_request)
+                all_predictions.extend(batch_predictions)
+            
+            predictions = np.array(all_predictions)
+            
+            # Ensure we have the right number of predictions
+            if len(predictions) != len(X):
+                print(f"⚠️  DeepAR returned {len(predictions)} predictions, expected {len(X)}")
+                # Pad or truncate to match expected length
+                if len(predictions) < len(X):
+                    predictions = np.pad(predictions, (0, len(X) - len(predictions)), 'edge')
+                else:
+                    predictions = predictions[:len(X)]
+            
+            return predictions
+            
+        except Exception as e:
+            print(f"⚠️  DeepAR prediction failed: {str(e)}, returning zeros")
+            return np.zeros(len(X))
+    
+    def _prepare_deepar_format(self, X, context_data: Optional[Dict] = None) -> Dict:
+        """
+        Prepare data in DeepAR format
+        
+        DeepAR expects:
+        {
+            "instances": [
+                {
+                    "start": "2023-01-01 00:00:00",
+                    "target": [1.0, 2.0, 3.0, ...],
+                    "cat": [0]  # optional categorical features
+                },
+                ...
+            ],
+            "configuration": {
+                "num_samples": 100,
+                "output_types": ["mean", "quantiles"],
+                "quantiles": ["0.1", "0.5", "0.9"]
+            }
+        }
+        
+        Args:
+            X: Feature matrix (pandas DataFrame expected)
+            context_data: Historical data for each item
+            
+        Returns:
+            Dictionary in DeepAR format
+        """
+        import pandas as pd
+        
+        if context_data is None:
+            # If no context data provided, we can't make meaningful predictions
+            return {}
+        
+        instances = []
+        
+        # Group by item_id to create time series for each item
+        if isinstance(X, pd.DataFrame) and 'item_id' in X.columns:
+            for item_id in X['item_id'].unique():
+                if item_id in context_data:
+                    item_context = context_data[item_id]
+                    
+                    # Create instance for this item
+                    instance = {
+                        "start": item_context.get('start', '2023-01-01 00:00:00'),
+                        "target": item_context.get('target', [])
+                    }
+                    
+                    # Add categorical features if available
+                    if 'cat' in item_context:
+                        instance['cat'] = item_context['cat']
+                    
+                    # Add dynamic features if available
+                    if 'dynamic_feat' in item_context:
+                        instance['dynamic_feat'] = item_context['dynamic_feat']
+                    
+                    instances.append(instance)
+        
+        if not instances:
+            return {}
+        
+        # Prepare request
+        request = {
+            "instances": instances,
+            "configuration": {
+                "num_samples": 100,
+                "output_types": ["mean"],
+                "quantiles": ["0.5"]
+            }
+        }
+        
+        return request
 
 
 class ModelLoader:

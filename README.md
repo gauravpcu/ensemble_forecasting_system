@@ -84,6 +84,8 @@ python3 scripts/train.py                                         # Train new mod
 
 - **90-Day Context**: Uses 90 days of history for predictions
 - **Ensemble Model**: LightGBM (95%) + DeepAR (5%)
+  - LightGBM: Gradient boosting with engineered features
+  - DeepAR: AWS SageMaker endpoint for time series forecasting
 - **Customer Calibration**: Adjust predictions per customer
 - **Multi-Day Forecasting**: Predict 1-30 days ahead
 - **No Data Leakage**: Context ends before prediction starts
@@ -342,9 +344,18 @@ python3 scripts/config.py --update scionhealth 1.05 \
 - `TEST_DATA_DIR`: Test data directory (default: ./tests/data)
 
 **Models**:
-- `LIGHTGBM_MODEL_PATH`: LightGBM model file
-- `DEEPAR_ENDPOINT_NAME`: SageMaker endpoint
-- `DEEPAR_REGION`: AWS region
+- `LIGHTGBM_MODEL_PATH`: LightGBM model file (default: ./model/lightgbm_model.pkl)
+- `DEEPAR_ENDPOINT_NAME`: SageMaker endpoint name (e.g., hybrent-nov)
+- `DEEPAR_REGION`: AWS region (e.g., us-east-1)
+
+**DeepAR Configuration**:
+- ✅ **Fully Operational** with AWS SSO
+- Requires AWS SSO configured: `aws configure sso`
+- Set AWS_PROFILE in .env: `AWS_PROFILE=AWSAdministratorAccess-236357498302`
+- Model endpoint: `hybrent-nov` in `us-east-1`
+- Features: 2 categorical (customer, facility) + 2 dynamic (day of week, month progress)
+- Predictions made in batches of 100 items to avoid request size limits
+- See `DEEPAR_CONFIG.md` for complete training configuration
 
 **Ensemble**:
 - `LIGHTGBM_WEIGHT`: 0.95 (95%)

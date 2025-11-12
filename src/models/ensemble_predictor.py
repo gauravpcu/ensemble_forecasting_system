@@ -40,19 +40,24 @@ class EnsemblePredictor:
             for key in self.weights:
                 self.weights[key] /= total_weight
     
-    def predict(self, X, y_actual: Optional[np.ndarray] = None) -> Dict:
+    def predict(self, X, X_with_metadata=None, context_data: Optional[Dict] = None) -> Dict:
         """
         Generate ensemble predictions
         
         Args:
-            X: Feature matrix
-            y_actual: Actual values (optional, for DeepAR mock predictions)
+            X: Feature matrix for LightGBM (numeric features only)
+            X_with_metadata: Feature matrix with metadata (item_id) for DeepAR
+            context_data: Historical context data for DeepAR (optional)
+                         Format: {item_id: {'start': timestamp, 'target': [values]}}
             
         Returns:
             Dictionary with predictions and metadata
         """
         predictions = {}
         errors = {}
+        
+        # Use X_with_metadata for DeepAR if provided, otherwise use X
+        X_deepar = X_with_metadata if X_with_metadata is not None else X
         
         print("\n" + "="*60)
         print("GENERATING PREDICTIONS")
@@ -65,10 +70,10 @@ class EnsemblePredictor:
                     print(f"Predicting with {model_name}...")
                 
                 if model_name == 'deepar':
-                    # DeepAR needs special handling
-                    pred = model.predict_simple(X, y_actual)
+                    # DeepAR needs special handling with context data
+                    pred = model.predict_simple(X_deepar, context_data)
                 else:
-                    # Standard prediction interface
+                    # Standard prediction interface (LightGBM)
                     pred = model.predict(X)
                 
                 predictions[model_name] = pred
@@ -128,13 +133,13 @@ class EnsemblePredictor:
         
         return ensemble_pred
     
-    def predict_with_multiple_configs(self, X, y_actual: Optional[np.ndarray] = None) -> Dict:
+    def predict_with_multiple_configs(self, X, context_data: Optional[Dict] = None) -> Dict:
         """
         Generate predictions with multiple ensemble configurations
         
         Args:
             X: Feature matrix
-            y_actual: Actual values
+            context_data: Historical context data for DeepAR
             
         Returns:
             Dictionary with predictions for each configuration
@@ -145,7 +150,7 @@ class EnsemblePredictor:
         print("TESTING MULTIPLE ENSEMBLE CONFIGURATIONS")
         print("="*60)
         
-        for config_name, weights in config.ENSEMBLE_CONFIGS.items():
+        for config_name, weights in env_config.ENSEMBLE_CONFIGS.items():
             print(f"\nTesting '{config_name}' configuration: {weights}")
             
             # Temporarily update weights
@@ -153,7 +158,7 @@ class EnsemblePredictor:
             self.weights = weights
             
             try:
-                result = self.predict(X, y_actual)
+                result = self.predict(X, context_data)
                 results[config_name] = result
             except Exception as e:
                 print(f"✗ Configuration '{config_name}' failed: {str(e)}")

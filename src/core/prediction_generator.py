@@ -431,6 +431,112 @@ class PredictionGenerator:
         self.predictor = EnsemblePredictor(models=self.models)
         return self
     
+    def _prepare_deepar_context(self):
+        """
+        Prepare historical context data for DeepAR
+        
+        Returns:
+            Dictionary with context data for each item_id
+            Format: {item_id: {'start': timestamp, 'target': [values], 'cat': [category]}}
+        """
+        context_data = {}
+        
+        if 'item_id' not in self.processed_data.columns:
+            return context_data
+        
+        # Group by item_id and prepare time series
+        for item_id, group in self.processed_data.groupby('item_id'):
+            # Sort by timestamp
+            group = group.sort_values('timestamp')
+            
+            # Get historical values
+            if 'target_value' in group.columns:
+                target_values = group['target_value'].tolist()
+            else:
+                # Use rolling mean as proxy if target_value not available
+                target_values = group.get('rolling_mean_7d', [0] * len(group)).tolist()
+            
+            # Get start timestamp
+            start_timestamp = group['timestamp'].min()
+            if pd.notna(start_timestamp):
+                # Convert to datetime if it's a string
+                if isinstance(start_timestamp, str):
+                    start_str = start_timestamp
+                else:
+                    start_str = pd.to_datetime(start_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                start_str = '2023-01-01 00:00:00'
+            
+            # Get categorical features
+            cat_customer = 0
+            cat_facility = 0
+            
+            if 'customer_encoded' in group.columns:
+                # Map customer to range 0-87 (cardinality 88)
+                cat_customer = int(group['customer_encoded'].iloc[0]) % 88
+            elif 'CustomerID_encoded' in group.columns:
+                cat_customer = int(group['CustomerID_encoded'].iloc[0]) % 88
+            
+            if 'facility_encoded' in group.columns:
+                # Map facility to range 0-164 (cardinality 165)
+                cat_facility = int(group['facility_encoded'].iloc[0]) % 165
+            elif 'FacilityID_encoded' in group.columns:
+                cat_facility = int(group['FacilityID_encoded'].iloc[0]) % 165
+            
+            # Generate dynamic features
+            dynamic_feat = self._generate_dynamic_features(group)
+            
+            context_data[item_id] = {
+                'start': start_str,
+                'target': target_values,
+                'cat': [cat_customer, cat_facility],
+                'dynamic_feat': dynamic_feat
+            }
+        
+        return context_data
+    
+    def _generate_dynamic_features(self, group, forecast_days=14):
+        """
+        Generate dynamic features for DeepAR
+        
+        DeepAR model expects 2 dynamic features:
+        1. Day of week cyclical (normalized 0-1)
+        2. Month progress cyclical (normalized 0-1)
+        
+        Features must cover both historical context AND forecast period.
+        
+        Args:
+            group: DataFrame group for a single item
+            forecast_days: Number of days to forecast (default: 14)
+            
+        Returns:
+            List of 2 lists (dynamic features)
+        """
+        timestamps = pd.to_datetime(group['timestamp'])
+        
+        # Get the last timestamp and generate future timestamps
+        last_timestamp = timestamps.max()
+        future_timestamps = pd.date_range(
+            start=last_timestamp + pd.Timedelta(days=1),
+            periods=forecast_days,
+            freq='D'
+        )
+        
+        # Combine historical and future timestamps
+        all_timestamps = pd.concat([timestamps, pd.Series(future_timestamps)])
+        
+        # Feature 1: Day of week cyclical (0-6 mapped to 0-1)
+        day_of_week = all_timestamps.dt.dayofweek
+        day_of_week_normalized = (day_of_week / 6.0).tolist()
+        
+        # Feature 2: Month progress cyclical (day of month normalized)
+        # Using 11-day cycle pattern from training data
+        day_of_month = all_timestamps.dt.day
+        month_progress = ((day_of_month - 1) % 11) / 11.0
+        month_progress_normalized = month_progress.tolist()
+        
+        return [day_of_week_normalized, month_progress_normalized]
+    
     def generate_predictions(self):
         """Generate predictions using ensemble model"""
         self._print("\n[4/5] Generating predictions...")
@@ -440,8 +546,19 @@ class PredictionGenerator:
         X_features, _ = loader.prepare_lightgbm_features(self.processed_data)
         self._print(f"   Prepared LightGBM features: {X_features.shape}")
         
-        # Make predictions
-        predictions = self.predictor.predict(X_features)
+        # Create a DataFrame with item_id for DeepAR (separate from LightGBM features)
+        X_with_metadata = X_features.copy()
+        if 'item_id' in self.processed_data.columns:
+            X_with_metadata['item_id'] = self.processed_data['item_id'].values
+        
+        # Prepare context data for DeepAR
+        deepar_context = self._prepare_deepar_context()
+        if deepar_context:
+            self._print(f"   Prepared DeepAR context: {len(deepar_context)} items")
+        
+        # Make predictions with context data
+        # Pass X_features (without item_id) for LightGBM, X_with_metadata for DeepAR
+        predictions = self.predictor.predict(X_features, X_with_metadata, context_data=deepar_context)
         
         # Add prediction metadata
         prediction_date = self.target_date if self.target_date else datetime.now()
