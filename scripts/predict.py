@@ -26,7 +26,7 @@ from src.core.prediction_generator import PredictionGenerator
 from datetime import datetime, timedelta
 
 
-def predict(date=None, customers=None, facility=None, output=None, days=14):
+def predict(date=None, customers=None, facility=None, output=None, days=14, use_test_data=False):
     """
     Generate predictions with flexible parameters
     
@@ -45,6 +45,7 @@ def predict(date=None, customers=None, facility=None, output=None, days=14):
         output: Output file path - optional (e.g., "predictions.csv")
         days: Number of days to predict (default: 14)
               Example: date='2025-11-15', days=14 → predicts Nov 15-28
+        use_test_data: If True, uses test_data.csv if it exists (default: False)
     
     Returns:
         DataFrame with predictions including columns:
@@ -111,26 +112,48 @@ def predict(date=None, customers=None, facility=None, output=None, days=14):
     print("=" * 80)
     
     # ========================================================================
-    # STEP 3: Generate predictions using PredictionGenerator
+    # STEP 3: Determine data source
+    # ========================================================================
+    # Check if we should use test_data.csv
+    source_data = None
+    use_preprocessed = False
+    
+    if use_test_data:
+        from src.config.env_config import TEST_DATA_DIR
+        test_data_path = os.path.join(TEST_DATA_DIR, 'test_data.csv')
+        if os.path.exists(test_data_path):
+            source_data = test_data_path
+            use_preprocessed = True
+            print(f"Using:      {test_data_path}")
+        else:
+            print(f"⚠️  test_data.csv not found, using SOURCE_DATA_FILE")
+            print(f"    Run 'python scripts/extract.py' to generate test data")
+    
+    # ========================================================================
+    # STEP 4: Generate predictions using PredictionGenerator
     # ========================================================================
     # Create generator with parameters:
     # - customers: list of customer IDs to predict for (None = all customers)
     # - start_date: first date to predict for
     # - end_date: last date to predict for (calculated from start_date + days)
     # - context_days: how many days of history to use (90 days = ~3 months)
+    # - source_data: path to data file (None = use SOURCE_DATA_FILE from config)
+    # - use_preprocessed: True if data already has features (test_data.csv)
     # - verbose: print progress messages during generation
     generator = PredictionGenerator(
         customers=customer_list,
         start_date=start_date,
         end_date=end_date,
         context_days=90,  # Use 90 days of historical data for patterns
+        source_data=source_data,
+        use_preprocessed=use_preprocessed,
         verbose=True
     )
     
     # Generate predictions (save=False means don't auto-save to file)
     # This will:
-    # 1. Load historical data
-    # 2. Engineer features (rolling averages, lags, seasonality)
+    # 1. Load historical data (or test_data.csv if use_test_data=True)
+    # 2. Engineer features (or use preprocessed features from test_data.csv)
     # 3. Load LightGBM and DeepAR models
     # 4. Generate predictions using ensemble (95% LightGBM + 5% DeepAR)
     # 5. Apply customer calibrations
@@ -138,7 +161,7 @@ def predict(date=None, customers=None, facility=None, output=None, days=14):
     predictions = generator.generate(save=False)
     
     # ========================================================================
-    # STEP 4: Filter by facility if specified
+    # STEP 5: Filter by facility if specified
     # ========================================================================
     # If user specified a facility ID, filter predictions to only that facility
     # This is useful for facility-specific analysis
@@ -147,7 +170,7 @@ def predict(date=None, customers=None, facility=None, output=None, days=14):
         print(f"\n✓ Filtered to facility {facility}: {len(predictions):,} items")
     
     # ========================================================================
-    # STEP 5: Save to file if output path specified
+    # STEP 6: Save to file if output path specified
     # ========================================================================
     # Save predictions to CSV file if user provided output path
     if output:
@@ -155,7 +178,7 @@ def predict(date=None, customers=None, facility=None, output=None, days=14):
         print(f"\n✓ Saved to: {output}")
     
     # ========================================================================
-    # STEP 6: Print summary statistics
+    # STEP 7: Print summary statistics
     # ========================================================================
     print("\n" + "=" * 80)
     print("SUMMARY")
@@ -176,7 +199,7 @@ def predict(date=None, customers=None, facility=None, output=None, days=14):
     print(f"Average per Item:     {predictions['predicted_value'].mean():.2f} units")
     
     # ========================================================================
-    # STEP 7: Show customer-specific or item-specific details
+    # STEP 8: Show customer-specific or item-specific details
     # ========================================================================
     
     # If multiple customers: show summary by customer
@@ -244,7 +267,8 @@ def parse_args(args):
             'customers': None,
             'facility': None,
             'output': None,
-            'days': 14  # Default to 14 days
+            'days': 14,  # Default to 14 days
+            'use_test_data': False
         }
         
         # Parse named arguments
@@ -265,6 +289,9 @@ def parse_args(args):
             elif args[i] == '--output' and i + 1 < len(args):
                 params['output'] = args[i + 1]
                 i += 2
+            elif args[i] == '--use-test-data':
+                params['use_test_data'] = True
+                i += 1
             else:
                 i += 1
         
@@ -278,7 +305,8 @@ def parse_args(args):
         'customers': None,
         'facility': None,
         'output': None,
-        'days': 14  # Default to 14 days
+        'days': 14,  # Default to 14 days
+        'use_test_data': False
     }
     
     # No arguments: predict for all customers today
@@ -402,6 +430,9 @@ def print_usage():
     print("\n  # Named arguments with custom days")
     print("  python predict.py --date 2025-11-15 --customers scionhealth --days 7")
     print("  python predict.py --date 2025-11-15 --customers scionhealth --days 30 --output file.csv")
+    print("\n  # Use test_data.csv (if it exists)")
+    print("  python predict.py --use-test-data")
+    print("  python predict.py --use-test-data --customers scionhealth")
     print("\nNotes:")
     print("  - Date format: YYYY-MM-DD (start date)")
     print("  - Days: Number of days to predict (default: 14)")
@@ -409,6 +440,7 @@ def print_usage():
     print("  - Facility: numeric ID")
     print("  - Output: any .csv or .json file")
     print("  - Predictions are generated for date to date+days")
+    print("  - --use-test-data: Uses test_data.csv if available (faster, preprocessed features)")
     print("=" * 80)
 
 

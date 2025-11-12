@@ -1,17 +1,39 @@
 """
-Extract and process order history data for forecasting
-FIXED: Split data BEFORE feature engineering to prevent data leakage
+Data Extraction Script
+
+Generates context and validation data files needed for testing and predictions.
+
+What it does:
+  1. Extracts order history from SOURCE_DATA_FILE
+  2. Splits into context period (for features) and validation period (for testing)
+  3. Engineers features on context data only (prevents data leakage)
+  4. Saves validation data as actuals only (no features)
+
+Output files:
+  - test_data.csv: Context data with engineered features
+  - val_data.csv: Validation data with actuals only
+
+Usage:
+    python scripts/extract.py
+
+Configuration (.env):
+    SOURCE_DATA_FILE - Path to order history CSV
+    TEST_DATA_DIR - Output directory for extracted files
+    TOTAL_EXTRACTION_DAYS - Total days to extract (default: 90)
+    VALIDATION_DAYS - Days for validation period (default: 14)
 """
 
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from statsmodels.tsa.seasonal import seasonal_decompose
 import warnings
 warnings.filterwarnings('ignore')
 import sys
 import os
+
+# Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.config.env_config import (
     SOURCE_DATA_FILE, TEST_DATA_DIR, VALIDATION_DAYS, TEST_DAYS, 
     TOTAL_EXTRACTION_DAYS, ROLLING_WINDOW_SHORT, ROLLING_WINDOW_LONG,
@@ -23,7 +45,13 @@ SOURCE_FILE = SOURCE_DATA_FILE
 OUTPUT_DIR = TEST_DATA_DIR + "/"
 
 print("=" * 80)
-print("ORDER HISTORY DATA EXTRACTION (FIXED - NO DATA LEAKAGE)")
+print("DATA EXTRACTION - Generate Context & Validation Files")
+print("=" * 80)
+print(f"\nConfiguration:")
+print(f"  Total extraction days: {TOTAL_EXTRACTION_DAYS}")
+print(f"  Validation days: {VALIDATION_DAYS}")
+print(f"  Test days: {TEST_DAYS}")
+print(f"  Output directory: {TEST_DATA_DIR}")
 print("=" * 80)
 
 # Step 1: Load data
@@ -35,17 +63,31 @@ print(f"   Loaded {len(df):,} records")
 print("\n[2/7] Filtering for extraction period...")
 df['CreateDate'] = pd.to_datetime(df['CreateDate'])
 max_date = df['CreateDate'].max()
-min_date = max_date - timedelta(days=TOTAL_EXTRACTION_DAYS-1)
+
+# Calculate dates correctly:
+# - Validation period: last VALIDATION_DAYS days
+# - Context period: TOTAL_EXTRACTION_DAYS days BEFORE validation period
+validation_start = max_date - timedelta(days=VALIDATION_DAYS-1)
+context_start = validation_start - timedelta(days=TOTAL_EXTRACTION_DAYS)
+context_end = validation_start - timedelta(days=1)
+
+# Total extraction includes both context and validation
+min_date = context_start
 df_filtered = df[df['CreateDate'] >= min_date].copy()
-print(f"   Date range: {min_date.date()} to {max_date.date()}")
+
+print(f"   Full date range: {min_date.date()} to {max_date.date()}")
+print(f"   Total days: {(max_date - min_date).days + 1}")
 print(f"   Filtered to {len(df_filtered):,} records")
 
 # Step 3: Determine split date FIRST (before any feature engineering)
 print("\n[3/7] Determining split date...")
-split_date = max_date - timedelta(days=VALIDATION_DAYS-1)
+split_date = context_end
+context_days = (context_end - context_start).days + 1
+validation_days = (max_date - validation_start).days + 1
+
 print(f"   Split date: {split_date.date()}")
-print(f"   Test period: {min_date.date()} to {split_date.date()}")
-print(f"   Validation period: {(split_date + timedelta(days=1)).date()} to {max_date.date()}")
+print(f"   Context period: {context_start.date()} to {context_end.date()} ({context_days} days)")
+print(f"   Validation period: {validation_start.date()} to {max_date.date()} ({validation_days} days)")
 
 # Step 4: Split data BEFORE feature engineering (CRITICAL FIX)
 print("\n[4/7] Splitting data BEFORE feature engineering...")
@@ -213,23 +255,25 @@ print("\n" + "=" * 80)
 print("SUMMARY STATISTICS")
 print("=" * 80)
 
-print(f"\nTest Data:")
+print(f"\nContext Data (test_data.csv):")
+print(f"  Records:       {len(agg_test):,}")
+print(f"  Unique items:  {agg_test['item_id'].nunique():,}")
 print(f"  Target mean:   {agg_test['target_value'].mean():.2f}")
-print(f"  Target std:    {agg_test['target_value'].std():.2f}")
 print(f"  Target median: {agg_test['target_value'].median():.2f}")
 print(f"  Target range:  [{agg_test['target_value'].min():.0f}, {agg_test['target_value'].max():.0f}]")
 
-print(f"\nValidation Data:")
+print(f"\nValidation Data (val_data.csv):")
+print(f"  Records:       {len(agg_val):,}")
+print(f"  Unique items:  {agg_val['item_id'].nunique():,}")
 print(f"  Target mean:   {agg_val['target_value'].mean():.2f}")
-print(f"  Target std:    {agg_val['target_value'].std():.2f}")
 print(f"  Target median: {agg_val['target_value'].median():.2f}")
 print(f"  Target range:  [{agg_val['target_value'].min():.0f}, {agg_val['target_value'].max():.0f}]")
 
 print("\n" + "=" * 80)
-print("EXTRACTION COMPLETE - NO DATA LEAKAGE!")
+print("EXTRACTION COMPLETE!")
 print("=" * 80)
-print("\n✓ Test data has features (calculated on test period only)")
-print("✓ Validation data has ACTUALS ONLY (no features)")
-print("✓ No data leakage - validation features not calculated")
-print("✓ Ready for truly forward-looking predictions")
+print("\n✓ Context data (test_data.csv) - Features engineered from context period")
+print("✓ Validation data (val_data.csv) - Actuals only, no features")
+print("✓ No data leakage - Validation features not calculated")
+print("✓ Ready for predictions and testing")
 print("\n" + "=" * 80)

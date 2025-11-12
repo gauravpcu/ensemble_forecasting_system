@@ -36,11 +36,13 @@ warnings.filterwarnings('ignore')
 # Import configuration settings
 from src.config.env_config import (
     SOURCE_DATA_FILE,           # Path to source data CSV
+    TEST_DATA_DIR,              # Test data directory
     CLASSIFICATION_THRESHOLD,   # Threshold for reorder classification (default: 4 units)
     ROLLING_WINDOW_SHORT,       # Short rolling window (default: 7 days)
     ROLLING_WINDOW_LONG,        # Long rolling window (default: 30 days)
     ROLLING_WINDOW_MIN_PERIODS  # Minimum periods for rolling calculations
 )
+import os
 
 # Import model and data utilities
 from src.models.model_loader import load_models
