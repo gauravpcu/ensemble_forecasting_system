@@ -1,0 +1,33 @@
+================================================================================
+VALIDATION RESULTS
+================================================================================
+
+Generated: 2025-11-12 05:02:19
+Total Items Validated: 572,670
+
+Regression Metrics:
+  MAE:              10.39 units
+  RMSE:             46.33 units
+  MAPE:             65.8%
+  R²:               0.416
+
+Classification Metrics (threshold=4):
+  Precision:        95.6%
+  Recall:           92.8%
+  F1 Score:         94.2%
+  Accuracy:         91.3%
+
+Confusion Matrix:
+  True Positives (TP):   403,414
+  False Positives (FP):  18,410
+  False Negatives (FN):  31,436
+  True Negatives (TN):   119,410
+
+Performance by Volume Category:
+       category  count        mae  precision   recall
+ Very Low (0-5) 207076   2.559675   0.721987 0.690337
+     Low (5-20) 229380   4.891462   1.000000 0.958427
+Medium (20-100) 116095  16.726917   1.000000 0.997580
+    High (100+)  20119 116.998638   1.000000 0.991401
+
+================================================================================

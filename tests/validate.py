@@ -230,7 +230,7 @@ def print_results(regression_metrics, classification_metrics, volume_analysis, t
 
 
 def save_results(output_file, regression_metrics, classification_metrics, volume_analysis, threshold, merged):
-    """Save results to file"""
+    """Save results to text file"""
     with open(output_file, 'w') as f:
         f.write("=" * 80 + "\n")
         f.write("VALIDATION RESULTS\n")
@@ -270,6 +270,106 @@ def save_results(output_file, regression_metrics, classification_metrics, volume
     print(f"\n✓ Results saved to: {output_file}")
 
 
+def save_comparison_csv(merged, threshold, output_dir):
+    """Save detailed comparison CSV with predictions vs actuals"""
+    # Calculate error metrics for each item
+    merged['error'] = merged['predicted_value'] - merged['target_value']
+    merged['abs_error'] = abs(merged['error'])
+    merged['pct_error'] = (merged['error'] / (merged['target_value'] + 1e-10)) * 100
+    
+    # Classification results
+    merged['actual_reorder'] = (merged['target_value'] >= threshold).astype(int)
+    merged['predicted_reorder_binary'] = (merged['predicted_value'] >= threshold).astype(int)
+    
+    # Determine classification result
+    def classify_result(row):
+        if row['predicted_reorder_binary'] == 1 and row['actual_reorder'] == 1:
+            return 'TP'  # True Positive
+        elif row['predicted_reorder_binary'] == 1 and row['actual_reorder'] == 0:
+            return 'FP'  # False Positive
+        elif row['predicted_reorder_binary'] == 0 and row['actual_reorder'] == 1:
+            return 'FN'  # False Negative
+        else:
+            return 'TN'  # True Negative
+    
+    merged['classification_result'] = merged.apply(classify_result, axis=1)
+    
+    # Volume category
+    merged['volume_category'] = pd.cut(
+        merged['target_value'],
+        bins=[0, 5, 20, 100, float('inf')],
+        labels=['Very Low (0-5)', 'Low (5-20)', 'Medium (20-100)', 'High (100+)']
+    )
+    
+    # Calculate customer-level metrics
+    customer_metrics = {}
+    for customer in merged['CustomerID'].unique():
+        customer_data = merged[merged['CustomerID'] == customer]
+        
+        # Regression metrics
+        y_true = customer_data['target_value']
+        y_pred = customer_data['predicted_value']
+        
+        mae = mean_absolute_error(y_true, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+        mape = np.mean(np.abs((y_true - y_pred) / (y_true + 1e-10))) * 100
+        
+        # Classification metrics
+        y_true_binary = customer_data['actual_reorder']
+        y_pred_binary = customer_data['predicted_reorder_binary']
+        
+        precision = precision_score(y_true_binary, y_pred_binary, zero_division=0)
+        recall = recall_score(y_true_binary, y_pred_binary, zero_division=0)
+        f1 = f1_score(y_true_binary, y_pred_binary, zero_division=0)
+        accuracy = (y_true_binary == y_pred_binary).mean()
+        
+        customer_metrics[customer] = {
+            'customer_mae': mae,
+            'customer_rmse': rmse,
+            'customer_mape': mape,
+            'customer_precision': precision,
+            'customer_recall': recall,
+            'customer_f1': f1,
+            'customer_accuracy': accuracy
+        }
+    
+    # Add customer metrics to each row
+    for metric_name in ['customer_mae', 'customer_rmse', 'customer_mape', 
+                        'customer_precision', 'customer_recall', 'customer_f1', 'customer_accuracy']:
+        merged[metric_name] = merged['CustomerID'].map(
+            lambda x: customer_metrics[x][metric_name]
+        )
+    
+    # Select and order columns for output
+    output_columns = [
+        'CustomerID', 'FacilityID', 'ProductID', 'ProductName',
+        'predicted_value', 'target_value', 'error', 'abs_error', 'pct_error',
+        'predicted_reorder_binary', 'actual_reorder', 'classification_result',
+        'volume_category',
+        'customer_mae', 'customer_rmse', 'customer_mape',
+        'customer_precision', 'customer_recall', 'customer_f1', 'customer_accuracy',
+        'item_id'
+    ]
+    
+    # Filter to only columns that exist
+    output_columns = [col for col in output_columns if col in merged.columns]
+    
+    output_df = merged[output_columns].copy()
+    
+    # Sort by customer, then by absolute error (largest errors first)
+    output_df = output_df.sort_values(['CustomerID', 'abs_error'], ascending=[True, False])
+    
+    # Save to CSV
+    csv_path = os.path.join(output_dir, 'validation_comparison.csv')
+    output_df.to_csv(csv_path, index=False)
+    
+    print(f"✓ Comparison CSV saved to: {csv_path}")
+    print(f"  - {len(output_df):,} items")
+    print(f"  - {output_df['CustomerID'].nunique()} customers")
+    
+    return csv_path
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Validate predictions against actual data',
@@ -279,12 +379,15 @@ Examples:
   python tests/validate.py predictions.csv val_data.csv
   python tests/validate.py predictions.csv val_data.csv --output results.txt
   python tests/validate.py predictions.csv val_data.csv --threshold 5
+  python tests/validate.py predictions.csv val_data.csv --output-dir ./results
         """
     )
     
     parser.add_argument('predictions', help='Predictions CSV file')
     parser.add_argument('validation', help='Validation CSV file')
-    parser.add_argument('--output', '-o', help='Output file for results (optional)')
+    parser.add_argument('--output', '-o', help='Output text file for summary results (optional)')
+    parser.add_argument('--output-dir', '-d', default='./tests/data',
+                       help='Output directory for comparison CSV (default: ./tests/data)')
     parser.add_argument('--threshold', '-t', type=float, 
                        default=env_config.CLASSIFICATION_THRESHOLD,
                        help=f'Classification threshold (default: {env_config.CLASSIFICATION_THRESHOLD})')
@@ -311,12 +414,21 @@ Examples:
         # Print results
         print_results(regression_metrics, classification_metrics, volume_analysis, args.threshold)
         
-        # Save to file if requested
+        # Save comparison CSV (always)
+        print("\nSaving comparison CSV...")
+        os.makedirs(args.output_dir, exist_ok=True)
+        csv_path = save_comparison_csv(merged, args.threshold, args.output_dir)
+        
+        # Save summary to text file if requested
         if args.output:
             save_results(args.output, regression_metrics, classification_metrics, 
                         volume_analysis, args.threshold, merged)
         
         print("\n✅ Validation completed successfully!")
+        print(f"\nOutput files:")
+        print(f"  - Comparison CSV: {csv_path}")
+        if args.output:
+            print(f"  - Summary text: {args.output}")
         
     except Exception as e:
         print(f"\n❌ Validation failed: {e}")

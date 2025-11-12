@@ -170,12 +170,17 @@ def predict(date=None, customers=None, facility=None, output=None, days=14, use_
         print(f"\n✓ Filtered to facility {facility}: {len(predictions):,} items")
     
     # ========================================================================
-    # STEP 6: Save to file if output path specified
+    # STEP 6: Save to file (default or specified path)
     # ========================================================================
-    # Save predictions to CSV file if user provided output path
-    if output:
-        predictions.to_csv(output, index=False)
-        print(f"\n✓ Saved to: {output}")
+    # Default output path if not specified
+    if output is None:
+        from src.config.env_config import TEST_DATA_DIR
+        os.makedirs(TEST_DATA_DIR, exist_ok=True)
+        output = os.path.join(TEST_DATA_DIR, 'predictions.csv')
+    
+    # Save predictions to CSV file
+    predictions.to_csv(output, index=False)
+    print(f"\n✓ Saved to: {output}")
     
     # ========================================================================
     # STEP 7: Print summary statistics
